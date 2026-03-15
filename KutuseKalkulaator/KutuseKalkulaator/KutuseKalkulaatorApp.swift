@@ -16,7 +16,7 @@ struct KutuseKalkulaatorApp: App {
                 .preferredColorScheme(nil) // Follow system
         }
         .windowStyle(.automatic)
-        .defaultSize(width: 920, height: 820)
+        .defaultSize(width: 800, height: 820)
         .windowResizability(.contentMinSize)
         .commands {
             CommandGroup(replacing: .newItem) { }

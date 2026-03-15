@@ -3,7 +3,7 @@
 //  KutuseKalkulaator
 //
 //  Fetches Estonian fuel prices from public sources.
-//  Primary: pistik.net, Secondary: fuel-prices.eu, Fallback: manual entry
+//  Primary: 1182.ee, Secondary: pistik.net, fuel-prices.eu, kursikas.ee, Fallback: manual entry
 //
 
 import Foundation
@@ -13,9 +13,14 @@ enum FuelType: String, CaseIterable, Codable {
     case bensin95 = "95"
     case bensin98 = "98"
     case diesel = "Diesel"
-    case lpg = "LPG"
     
     var displayName: String { rawValue }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let raw = try container.decode(String.self)
+        self = FuelType(rawValue: raw) ?? .bensin95
+    }
 }
 
 /// Result of a price fetch attempt
@@ -23,7 +28,6 @@ struct FuelPrices: Equatable {
     let price95: Double?
     let price98: Double?
     let priceDiesel: Double?
-    let priceLPG: Double?
     let lastUpdated: Date
     let source: String
     
@@ -32,7 +36,6 @@ struct FuelPrices: Equatable {
         case .bensin95: return price95
         case .bensin98: return price98
         case .diesel: return priceDiesel
-        case .lpg: return priceLPG
         }
     }
 }
@@ -58,7 +61,13 @@ final class FuelPriceService: ObservableObject {
         
         defer { isLoading = false }
         
-        // 1. Try pistik.ee / pistik.net (has 95, 98, Diesel - clear structure)
+        // 1. Try 1182.ee (average of Krooning, Alexela, Olerex, Circle K)
+        if let p = await fetchFrom1182() {
+            prices = p
+            return
+        }
+        
+        // 2. Try pistik.ee / pistik.net (has 95, 98, Diesel - clear structure)
         if let p = await fetchFromPistik(url: "https://www.pistik.ee/kutusehinnad-eestis") {
             prices = p
             return
@@ -68,13 +77,13 @@ final class FuelPriceService: ObservableObject {
             return
         }
         
-        // 2. Try fuel-prices.eu (has 95, Diesel)
+        // 3. Try fuel-prices.eu (has 95, Diesel)
         if let p = await fetchFromFuelPricesEU() {
             prices = p
             return
         }
         
-        // 3. Try kursikas.ee (may be blocked)
+        // 4. Try kursikas.ee (may be blocked)
         if let p = await fetchFromKursikas() {
             prices = p
             return
@@ -87,11 +96,70 @@ final class FuelPriceService: ObservableObject {
                 price95: nil,
                 price98: nil,
                 priceDiesel: nil,
-                priceLPG: nil,
                 lastUpdated: Date(),
                 source: "Manuaalne"
             )
         }
+    }
+    
+    /// Parse 1182.ee/kytusehinnad - table with Krooning, Alexela, Olerex, Circle K. Averages prices per fuel type.
+    private func fetchFrom1182() async -> FuelPrices? {
+        guard let url = URL(string: "https://www.1182.ee/kytusehinnad") else { return nil }
+        
+        var request = URLRequest(url: url)
+        request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15", forHTTPHeaderField: "User-Agent")
+        request.setValue("text/html,application/xhtml+xml", forHTTPHeaderField: "Accept")
+        
+        do {
+            let (data, _) = try await session.data(for: request)
+            guard let html = String(data: data, encoding: .utf8) else { return nil }
+            
+            // Extract prices only from within fuel table rows (other 1.xxx numbers appear earlier on page)
+            let pricePattern = #"\b(1\.\d{3})\b"#
+            guard let regex = try? NSRegularExpression(pattern: pricePattern) else { return nil }
+            
+            func pricesInSection(from marker: String, until endMarker: String) -> [Double] {
+                guard let start = html.range(of: marker),
+                      let end = html.range(of: endMarker, range: start.upperBound..<html.endIndex) else { return [] }
+                let section = String(html[start.upperBound..<end.lowerBound])
+                let range = NSRange(section.startIndex..., in: section)
+                return regex.matches(in: section, range: range).compactMap { m -> Double? in
+                    guard let r = Range(m.range(at: 1), in: section) else { return nil }
+                    let d = Double(String(section[r]))
+                    return (d != nil && d! > 0.5 && d! < 3.0) ? d : nil
+                }
+            }
+            
+            let prices95 = pricesInSection(from: "fuelprice-type-95\">", until: "fuelprice-type-98\"")
+            let prices98 = pricesInSection(from: "fuelprice-type-98\">", until: "fuelprice-type-Diisel\"")
+            let pricesDiesel = pricesInSection(from: "fuelprice-type-Diisel\">", until: "</tr>")
+            
+            var p95: Double?
+            var p98: Double?
+            var pDiesel: Double?
+            if prices95.count >= 4 {
+                p95 = prices95.prefix(4).reduce(0, +) / 4
+            }
+            if prices98.count >= 4 {
+                p98 = prices98.prefix(4).reduce(0, +) / 4
+            }
+            if pricesDiesel.count >= 4 {
+                pDiesel = pricesDiesel.prefix(4).reduce(0, +) / 4
+            }
+            
+            if p95 != nil || p98 != nil || pDiesel != nil {
+                return FuelPrices(
+                    price95: p95,
+                    price98: p98,
+                    priceDiesel: pDiesel,
+                    lastUpdated: Date(),
+                    source: "1182.ee"
+                )
+            }
+        } catch {
+            lastError = error.localizedDescription
+        }
+        return nil
     }
     
     /// Parse pistik.ee / pistik.net - has 95, 98, Diisel in clear format
@@ -147,7 +215,6 @@ final class FuelPriceService: ObservableObject {
                     price95: p95,
                     price98: p98,
                     priceDiesel: pDiesel,
-                    priceLPG: 0.68, // Pistik table shows Eesti LPG ~0.68
                     lastUpdated: Date(),
                     source: host
                 )
@@ -198,7 +265,6 @@ final class FuelPriceService: ObservableObject {
                     price95: p95,
                     price98: p98,
                     priceDiesel: pDiesel,
-                    priceLPG: 0.68,
                     lastUpdated: Date(),
                     source: "fuel-prices.eu"
                 )
@@ -248,7 +314,6 @@ final class FuelPriceService: ObservableObject {
                     price95: p95,
                     price98: p98,
                     priceDiesel: pDiesel,
-                    priceLPG: 0.68,
                     lastUpdated: Date(),
                     source: "kursikas.ee"
                 )
@@ -271,21 +336,19 @@ final class FuelPriceService: ObservableObject {
     /// Allow manual price override when fetch fails
     func setManualPrice(_ price: Double, for fuelType: FuelType) {
         let current = prices ?? FuelPrices(
-            price95: nil, price98: nil, priceDiesel: nil, priceLPG: nil,
+            price95: nil, price98: nil, priceDiesel: nil,
             lastUpdated: Date(), source: "Manuaalne"
         )
         var p95 = current.price95
         var p98 = current.price98
         var pDiesel = current.priceDiesel
-        var pLPG = current.priceLPG
         switch fuelType {
         case .bensin95: p95 = price
         case .bensin98: p98 = price
         case .diesel: pDiesel = price
-        case .lpg: pLPG = price
         }
         prices = FuelPrices(
-            price95: p95, price98: p98, priceDiesel: pDiesel, priceLPG: pLPG,
+            price95: p95, price98: p98, priceDiesel: pDiesel,
             lastUpdated: Date(), source: "Manuaalne"
         )
         lastError = nil

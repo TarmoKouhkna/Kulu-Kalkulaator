@@ -36,7 +36,7 @@ struct MainTabView: View {
                 }
                 .tag(3)
         }
-        .frame(minWidth: 820, minHeight: 780)
+        .frame(minWidth: 800, minHeight: 780)
     }
 }
 

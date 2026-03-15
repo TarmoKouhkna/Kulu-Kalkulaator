@@ -22,7 +22,16 @@ struct ContentView: View {
             .frame(minWidth: 600)
         }
         .frame(minWidth: 620, minHeight: 780)
-        .background(Color("AppBackground"))
+        .background(
+            LinearGradient(
+                colors: [
+                    Color("AppBackground"),
+                    Color(red: 0.76, green: 0.85, blue: 0.79)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
         .task {
             await viewModel.refreshPrices()
         }
@@ -66,11 +75,14 @@ struct FuelPriceSection: View {
     var body: some View {
         CardContainer(title: "Kütuse hind", icon: "fuelpump.fill") {
             VStack(alignment: .leading, spacing: 12) {
-                HStack {
+                HStack(alignment: .center) {
                     if let price = viewModel.pricePerLitre {
                         Text(String(format: "%.3f €/L", price))
-                            .font(.title2.monospacedDigit().weight(.semibold))
+                            .font(.system(size: 28, weight: .bold, design: .rounded))
+                            .monospacedDigit()
                             .foregroundStyle(.primary)
+                            .contentTransition(.numericText())
+                            .animation(.spring(response: 0.35, dampingFraction: 0.7), value: price)
                     } else {
                         Text("— €/L")
                             .font(.title2)
@@ -83,6 +95,7 @@ struct FuelPriceSection: View {
                         Task { await viewModel.refreshPrices() }
                     } label: {
                         Image(systemName: "arrow.triangle.2.circlepath")
+                            .font(.title3)
                             .symbolEffect(.bounce, value: viewModel.isPriceLoading)
                     }
                     .buttonStyle(.plain)
@@ -126,7 +139,11 @@ struct ResultsSection: View {
     
     var body: some View {
         CardContainer(title: "Tulemused", icon: "eurosign.circle") {
-            VStack(spacing: 16) {
+            LazyVGrid(columns: [
+                GridItem(.flexible(), spacing: 16),
+                GridItem(.flexible(), spacing: 16),
+                GridItem(.flexible(), spacing: 16)
+            ], spacing: 16) {
                 ResultRow(
                     title: "Täistankimise ulatus",
                     value: viewModel.fullTankRangeKm.map { String(format: "%.0f km", $0) },
@@ -183,8 +200,9 @@ struct CardContainer<Content: View>: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
+            HStack(spacing: 10) {
                 Image(systemName: icon)
+                    .font(.title3)
                     .foregroundStyle(Color.accentColor)
                 Text(title)
                     .font(.headline)
@@ -193,13 +211,14 @@ struct CardContainer<Content: View>: View {
         }
         .padding(16)
         .background(
-            RoundedRectangle(cornerRadius: 12)
+            RoundedRectangle(cornerRadius: 14)
                 .fill(.ultraThinMaterial)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 14)
+                .strokeBorder(Color.primary.opacity(0.1), lineWidth: 1)
         )
+        .shadow(color: .black.opacity(0.06), radius: 8, x: 0, y: 4)
     }
 }
 
@@ -225,31 +244,33 @@ struct ResultRow: View {
     let subtitle: String?
     
     var body: some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                if let sub = subtitle {
-                    Text(sub)
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                }
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            if let sub = subtitle {
+                Text(sub)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
             }
-            .frame(minWidth: 120, alignment: .leading)
-            Spacer(minLength: 8)
             if let v = value {
                 Text(v)
-                    .font(.body.monospacedDigit().weight(.medium))
+                    .font(.system(size: 18, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
                     .contentTransition(.numericText())
-                    .animation(.easeInOut(duration: 0.2), value: v)
-                    .fixedSize(horizontal: true, vertical: false)
+                    .animation(.spring(response: 0.35, dampingFraction: 0.7), value: v)
             } else {
                 Text("—")
+                    .font(.body)
                     .foregroundStyle(.tertiary)
             }
         }
-        .padding(.vertical, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color.primary.opacity(0.04))
+        )
     }
 }
 

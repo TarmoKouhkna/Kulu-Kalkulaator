@@ -5,7 +5,7 @@ Estonian cost calculator — a native macOS app built with SwiftUI. Multiple cal
 ## Features
 
 ### Kütusekalkulaator (Fuel Calculator)
-- **Car Setup**: Name, fuel type (95, 98, Diesel, LPG), consumption (L/100km), tank size
+- **Car Setup**: Name, fuel type (95, 98, Diesel), consumption (L/100km), tank size
 - **Live Estonian Fuel Prices**: Fetches from pistik.ee, fuel-prices.eu, or kursikas.ee
 - **Results Dashboard**: Full tank range, full tank cost, cost per km (auto-updates as you type)
 - **Distance Calculator**: Enter distance → litres needed and cost
