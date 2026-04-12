@@ -119,17 +119,17 @@ struct SalesTaxView: View {
                     VStack(spacing: 12) {
                         ResultRow(
                             title: "Summa ilma käibemaksuta",
-                            value: netAmount.map { String(format: "%.2f €", $0) },
+                            value: netAmount.map { fmtNum($0, decimals: 2, suffix: "€") },
                             subtitle: nil
                         )
                         ResultRow(
                             title: "Käibemaks (\(String(format: "%.0f", taxRate))%)",
-                            value: taxAmount.map { String(format: "%.2f €", $0) },
+                            value: taxAmount.map { fmtNum($0, decimals: 2, suffix: "€") },
                             subtitle: nil
                         )
                         ResultRow(
                             title: "Summa käibemaksuga",
-                            value: grossAmount.map { String(format: "%.2f €", $0) },
+                            value: grossAmount.map { fmtNum($0, decimals: 2, suffix: "€") },
                             subtitle: nil
                         )
                     }
@@ -139,7 +139,13 @@ struct SalesTaxView: View {
             .frame(minWidth: 600)
         }
         .frame(minWidth: 620, minHeight: 400)
-        .background(Color("AppBackground"))
+        .background(
+            LinearGradient(
+                colors: [Color("AppBackground"), Color(red: 0.76, green: 0.85, blue: 0.79)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
     }
 }
 
