@@ -42,10 +42,42 @@ struct ContentView: View {
 
 struct CarSetupSection: View {
     @ObservedObject var viewModel: CalculatorViewModel
-    
+
     var body: some View {
         CardContainer(title: "Auto seaded", icon: "car.fill") {
             VStack(alignment: .leading, spacing: 16) {
+                // Profile picker
+                HStack(spacing: 8) {
+                    Picker("", selection: $viewModel.selectedProfileId) {
+                        ForEach(viewModel.profiles) { profile in
+                            Text(profile.carName.isEmpty ? "Nimetu auto" : profile.carName)
+                                .tag(profile.id)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(maxWidth: .infinity)
+
+                    Button {
+                        viewModel.addProfile()
+                    } label: {
+                        Image(systemName: "plus.circle")
+                            .font(.title3)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Lisa uus auto profiil")
+
+                    Button {
+                        viewModel.deleteCurrentProfile()
+                    } label: {
+                        Image(systemName: "trash")
+                            .font(.title3)
+                            .foregroundStyle(.red.opacity(viewModel.profiles.count > 1 ? 1 : 0.3))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(viewModel.profiles.count <= 1)
+                    .help("Kustuta see profiil")
+                }
+
                 LabeledField(label: "Auto nimi/mudel", text: $viewModel.carName, placeholder: "nt. Toyota Corolla")
                 
                 HStack {
@@ -77,7 +109,7 @@ struct FuelPriceSection: View {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(alignment: .center) {
                     if let price = viewModel.pricePerLitre {
-                        Text(String(format: "%.3f €/L", price))
+                        Text(fmtNum(price, decimals: 3, suffix: "€/L"))
                             .font(.system(size: 28, weight: .bold, design: .rounded))
                             .monospacedDigit()
                             .foregroundStyle(.primary)
@@ -91,15 +123,9 @@ struct FuelPriceSection: View {
                     
                     Spacer()
                     
-                    Button {
+                    RefreshButton(isLoading: viewModel.isPriceLoading) {
                         Task { await viewModel.refreshPrices() }
-                    } label: {
-                        Image(systemName: "arrow.triangle.2.circlepath")
-                            .font(.title3)
-                            .symbolEffect(.bounce, value: viewModel.isPriceLoading)
                     }
-                    .buttonStyle(.plain)
-                    .disabled(viewModel.isPriceLoading)
                 }
                 
                 if let source = viewModel.priceSource, let date = viewModel.lastPriceUpdate {
@@ -146,17 +172,17 @@ struct ResultsSection: View {
             ], spacing: 16) {
                 ResultRow(
                     title: "Täistankimise ulatus",
-                    value: viewModel.fullTankRangeKm.map { String(format: "%.0f km", $0) },
+                    value: viewModel.fullTankRangeKm.map { fmtNum($0, decimals: 0, suffix: "km") },
                     subtitle: "Paagi maht ÷ kulu × 100"
                 )
                 ResultRow(
                     title: "Täistankimise maksumus",
-                    value: viewModel.fullTankCostEur.map { String(format: "%.2f €", $0) },
+                    value: viewModel.fullTankCostEur.map { fmtNum($0, decimals: 2, suffix: "€") },
                     subtitle: "Paagi maht × hind"
                 )
                 ResultRow(
                     title: "Kulu km kohta",
-                    value: viewModel.costPerKmEur.map { String(format: "%.3f €/km", $0) },
+                    value: viewModel.costPerKmEur.map { fmtNum($0, decimals: 3, suffix: "€/km") },
                     subtitle: "Hind × (kulu ÷ 100)"
                 )
             }
@@ -177,14 +203,95 @@ struct DistanceCalculatorSection: View {
                 VStack(spacing: 12) {
                     ResultRow(
                         title: "Vajalik kütus",
-                        value: viewModel.litresNeeded.map { String(format: "%.1f L", $0) },
+                        value: viewModel.litresNeeded.map { fmtNum($0, decimals: 1, suffix: "L") },
                         subtitle: nil
                     )
                     ResultRow(
                         title: "Maksumus",
-                        value: viewModel.distanceCostEur.map { String(format: "%.2f €", $0) },
+                        value: viewModel.distanceCostEur.map { fmtNum($0, decimals: 2, suffix: "€") },
                         subtitle: nil
                     )
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Number formatting
+
+/// Formats a number with thousands grouping (space) and Estonian decimal separator (,).
+/// Example: fmtNum(10000.5, decimals: 2, suffix: "€") → "10 000,50 €"
+func fmtNum(_ value: Double, decimals: Int, suffix: String = "") -> String {
+    // Format without grouping first, then insert spaces manually (avoids macOS 15+ API)
+    let f = NumberFormatter()
+    f.numberStyle = .decimal
+    f.minimumFractionDigits = decimals
+    f.maximumFractionDigits = decimals
+    f.usesGroupingSeparator = false
+    f.decimalSeparator = ","
+    guard let raw = f.string(from: NSNumber(value: value)) else {
+        return suffix.isEmpty ? "\(value)" : "\(value) \(suffix)"
+    }
+
+    let parts = raw.split(separator: ",", maxSplits: 1, omittingEmptySubsequences: false).map(String.init)
+    let intDigits = Array(parts[0])
+    let decPart   = parts.count > 1 ? "," + parts[1] : ""
+
+    // Insert non-breaking space every 3 digits from the right
+    var grouped = ""
+    for (i, ch) in intDigits.enumerated() {
+        if i > 0 && (intDigits.count - i) % 3 == 0 { grouped += "\u{00A0}" }
+        grouped.append(ch)
+    }
+
+    let result = grouped + decPart
+    return suffix.isEmpty ? result : "\(result) \(suffix)"
+}
+
+// MARK: - Refresh Button
+
+private struct RefreshButton: View {
+    let isLoading: Bool
+    let action: () -> Void
+
+    @State private var isHovered = false
+    @State private var spinAngle: Double = 0
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: "arrow.triangle.2.circlepath")
+                    .rotationEffect(.degrees(spinAngle))
+                if isLoading {
+                    Text("Laen...")
+                        .font(.caption)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(isLoading
+                          ? Color.accentColor.opacity(0.15)
+                          : isHovered
+                              ? Color.primary.opacity(0.12)
+                              : Color.primary.opacity(0.07))
+            )
+            .foregroundStyle(isLoading ? Color.accentColor : Color.primary)
+            .animation(.easeInOut(duration: 0.15), value: isHovered)
+        }
+        .buttonStyle(.plain)
+        .disabled(isLoading)
+        .onHover { isHovered = $0 }
+        .onChange(of: isLoading) { _, loading in
+            if loading {
+                spinAngle = 0
+                withAnimation(.linear(duration: 0.8).repeatForever(autoreverses: false)) {
+                    spinAngle = 360
+                }
+            } else {
+                withAnimation(.default) {
+                    spinAngle = 0
                 }
             }
         }
