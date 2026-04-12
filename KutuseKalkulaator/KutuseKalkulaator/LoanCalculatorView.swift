@@ -182,7 +182,8 @@ struct LoanCalculatorView: View {
                 }
 
                 // Amortization schedule
-                if !amortizationSchedule.isEmpty {
+                let schedule = amortizationSchedule
+                if !schedule.isEmpty {
                     CardContainer(title: "Tagasimaksegraafik (aasta kaupa)", icon: "calendar") {
                         VStack(spacing: 0) {
                             // Header
@@ -202,7 +203,8 @@ struct LoanCalculatorView: View {
 
                             Divider()
 
-                            ForEach(amortizationSchedule) { row in
+                            ForEach(schedule.indices, id: \.self) { idx in
+                                let row = schedule[idx]
                                 HStack(spacing: 8) {
                                     Text("\(row.year)")
                                         .frame(width: 46, alignment: .leading)
@@ -222,7 +224,7 @@ struct LoanCalculatorView: View {
                                 .font(.subheadline)
                                 .padding(.vertical, 5)
 
-                                if row.id != amortizationSchedule.last?.id {
+                                if idx < schedule.count - 1 {
                                     Divider().opacity(0.4)
                                 }
                             }

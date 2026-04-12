@@ -357,10 +357,13 @@ private struct SalaryBreakdownBar: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             GeometryReader { geo in
+                let visibleCount = segments.filter { total > 0 && $0.value > 0 }.count
+                let spacing = CGFloat(max(0, visibleCount - 1)) * 2
+                let availableWidth = geo.size.width - spacing
                 HStack(spacing: 2) {
                     ForEach(segments.indices, id: \.self) { i in
                         let fraction = total > 0 ? max(0, segments[i].value / total) : 0
-                        let width = geo.size.width * fraction
+                        let width = availableWidth * fraction
                         if width >= 2 {
                             Rectangle()
                                 .fill(segments[i].color)

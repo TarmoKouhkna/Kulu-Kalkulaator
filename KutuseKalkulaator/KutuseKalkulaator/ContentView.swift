@@ -234,11 +234,15 @@ func fmtNum(_ value: Double, decimals: Int, suffix: String = "") -> String {
     }
 
     let parts = raw.split(separator: ",", maxSplits: 1, omittingEmptySubsequences: false).map(String.init)
-    let intDigits = Array(parts[0])
+    let intPart   = parts[0]
     let decPart   = parts.count > 1 ? "," + parts[1] : ""
 
+    // Handle negative sign separately so it doesn't get a space inserted after it
+    let isNegative = intPart.hasPrefix("-")
+    let intDigits  = Array(isNegative ? intPart.dropFirst() : Substring(intPart))
+
     // Insert non-breaking space every 3 digits from the right
-    var grouped = ""
+    var grouped = isNegative ? "-" : ""
     for (i, ch) in intDigits.enumerated() {
         if i > 0 && (intDigits.count - i) % 3 == 0 { grouped += "\u{00A0}" }
         grouped.append(ch)
